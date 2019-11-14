@@ -7,3 +7,4 @@ This program requires some external libralies:
 - FFTW libraly to process audio signals: http://www.fftw.org/
 - GLM libraly to handle matrix operations: https://glm.g-truc.net/0.9.9/index.html
 
+This program also includes the files from a simple AudioFile library to handle audio files: https://github.com/adamstark/AudioFile
