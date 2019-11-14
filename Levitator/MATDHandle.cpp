@@ -74,7 +74,6 @@ void MATDHandle::sendCalibData() {
 	ctTop.sendString(message_top, 257);
 }
 
-/*
 void MATDHandle::_encodeFrame(float x, float y, float z, float amplitude, float phase, unsigned char red, unsigned char green, unsigned char blue, unsigned char *message) {
 	// round the positoin values to make them at 0.25 mm resolution
 	int int_x = (int)round(x * 4.0 * 1000.0);
@@ -147,85 +146,6 @@ void MATDHandle::updateMultipleFrames(int numFramesPerUpdate, glm::vec3 *positio
 	ctBottom.sendByte(SwapCommand);
 	ctTop.sendByte(SwapCommand);
 }
-*/
-void MATDHandle::_encodeFrame(float x, float y, float z, float amplitude, float phase, unsigned char red, unsigned char green, unsigned char blue, unsigned char *message) {
-	// round the positoin values to make them at 0.25 mm resolution
-	int int_x = (int)round(x * 32.0 * 1000.0);
-	int_x = (int_x < 0 ? 8192 + int_x : int_x);		// x is range from -128.0 to 128.0mm
-	int int_y = (int)round(y * 32.0 * 1000.0);
-	int_y = (int_y < 0 ? 8192 + int_y : int_y);		// y is range from -128.0 to 128.0mm
-	int int_z = (int)round(z * 32.0 * 1000.0);		// z is range from 0.0 to 256.0mm
-
-	// encode each parameters of the frame
-	unsigned char x_7_0 = (unsigned char)(int_x % 256);
-	unsigned char x_12_8 = (unsigned char)(int_x / 256);
-	unsigned char y_2_0 = (unsigned char)(int_y % 8);
-	unsigned char y_10_3 = (unsigned char)((int)(int_y / 8) % 256);
-	unsigned char y_12_11 = (unsigned char)(int_y / 2048);
-	unsigned char z_5_0 = (unsigned char)(int_z % 64);
-	unsigned char z_12_6 = (unsigned char)(int_z / 64);
-
-
-	unsigned char descreteAmplitude = _discretizeAmplitude(amplitude);
-	unsigned char descretePhase = _discretizePhase(phase);
-
-	message[0] = x_7_0;					// from 0th to 7th bits of the x coordinate
-	message[1] = x_12_8 + y_2_0 * 32;	// from 8th and 12th bits of the x and 0th to 2th bits of the y coordinates
-	message[2] = y_10_3;				// from 3th and 10th bits of the y
-	message[3] = y_12_11 + z_5_0 * 4;	// from 11th and 12th bits of the y and 0th to 5th bits of the z coordinates
-	message[4] = z_12_6;				// from 6th and 12th bits of the z coordinate
-	message[5] = descreteAmplitude;
-	message[6] = descretePhase;
-	message[7] = red;
-	message[8] = green;
-	message[9] = blue;
-}
-
-void MATDHandle::updateFrame(glm::vec3 position, float amplitude, float phase, glm::vec3 colour, bool twinFlag) {
-	if (status == MATDState::INIT)
-		return;
-
-	static unsigned char message_bottom[11], message_top[11];
-	static float zCenter = BoardHeight / 2.0f;
-
-	// number of frames is 1
-	message_bottom[0] = 1;
-	message_top[0] = 1;
-	float signature = twinFlag ? M_PI : 0.0f;	// signature for the top board is PI when create a twin trap, 0 when create a focus point
-	_encodeFrame(position.y, position.x, position.z + zCenter, amplitude, phase, colour.r, colour.g, colour.b, &message_bottom[1]);	// swap x and y to match the Optitrack coordinate
-	_encodeFrame(position.y, -position.x, -position.z + zCenter, amplitude, phase + signature, colour.r, colour.g, colour.b, &message_top[1]);	// top board is rotated around x-axis
-
-	// send the messeges
-	ctBottom.sendString(message_bottom, 11);
-	ctTop.sendString(message_top, 11);
-	ctBottom.sendByte(SwapCommand);
-	ctTop.sendByte(SwapCommand);
-}
-
-void MATDHandle::updateMultipleFrames(int numFramesPerUpdate, glm::vec3 *positions, float *amplitudes, float *phases, glm::vec3 *colours, bool *twinFlags) {
-	if (status == MATDState::INIT)
-		return;
-
-	static unsigned char message_bottom[2501], message_top[2501];
-	static unsigned char message_swap[1] = { SwapCommand };
-	static float zCenter = BoardHeight / 2.0f;
-
-	// number of frames needs to be sent first
-	message_bottom[0] = (unsigned char)numFramesPerUpdate;
-	message_top[0] = (unsigned char)numFramesPerUpdate;
-	for (int i = 0; i < numFramesPerUpdate; i++) {
-		float signature = twinFlags[i] ? M_PI : 0.0f;	// signature for the top board is PI when create a twin trap, 0 when create a focus point
-		_encodeFrame(positions[i].y, positions[i].x, positions[i].z + zCenter, amplitudes[i], phases[i], colours[i].r, colours[i].g, colours[i].b, &message_bottom[1 + i * 10]);	// swap x and y to match the Optitrack coordinate
-		_encodeFrame(positions[i].y, -positions[i].x, -positions[i].z + zCenter, amplitudes[i], phases[i] + signature, colours[i].r, colours[i].g, colours[i].b, &message_top[1 + i * 10]);	// top board is rotated around x-axis
-	}
-
-	// send the messeges
-	ctBottom.sendString(message_bottom, 10 * numFramesPerUpdate + 1);
-	ctTop.sendString(message_top, 10 * numFramesPerUpdate + 1);
-	ctBottom.sendByte(SwapCommand);
-	ctTop.sendByte(SwapCommand);
-}
-
 
 void MATDHandle::goToNextPosition(glm::vec3 previousPosition, glm::vec3 nextPosition, int speed) {
 	// amplitude, phase and colour is fixed to 1, 0 and off, respectively
